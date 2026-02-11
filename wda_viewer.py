@@ -280,10 +280,118 @@ VIEWER_HTML = """
             font-weight: 500;
         }
 
+        .status-log {
+            margin-top: 15px;
+            padding: 10px 15px;
+            background: #1e293b;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 13px;
+        }
+
+        .status-log strong {
+            color: #e2e8f0;
+            margin-right: 8px;
+        }
+
+        #phoneStatus {
+            color: #60a5fa;
+            font-weight: 500;
+        }
+
         .gesture-mode {
             margin-top: 10px;
             text-align: center;
             color: #64748b;
+            font-size: 12px;
+        }
+
+        /* Action Recorder */
+        .recorder-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+        }
+
+        .recorder-header {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .record-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .record-btn.inactive {
+            background: #dc2626;
+            border: 1px solid #991b1b;
+            color: white;
+        }
+
+        .record-btn.active {
+            background: #059669;
+            border: 1px solid #047857;
+            color: white;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .recorder-info {
+            color: #94a3b8;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .action-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background: #1e293b;
+            border-radius: 6px;
+            padding: 8px;
+        }
+
+        .action-item {
+            padding: 6px 10px;
+            margin: 4px 0;
+            background: #334155;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .action-item .action-type {
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
+        .recorder-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .recorder-controls button {
+            flex: 1;
+            padding: 8px;
             font-size: 12px;
         }
 
@@ -477,6 +585,23 @@ VIEWER_HTML = """
                 <strong>STATUS:</strong> <span id="phoneStatus">Detecting...</span>
             </div>
 
+            <!-- Action Recorder -->
+            <div class="recorder-panel">
+                <div class="recorder-header">
+                    <button class="record-btn inactive" id="recordBtn" onclick="toggleRecording()">
+                        <i class="fa-solid fa-circle"></i> <span id="recordBtnText">Start Recording</span>
+                    </button>
+                </div>
+                <div class="recorder-info" id="recorderInfo">Click Record to capture your actions</div>
+                <div class="action-list" id="actionList"></div>
+                <div class="recorder-controls">
+                    <button onclick="saveRecording()"><i class="fa-solid fa-save"></i> Save</button>
+                    <button onclick="loadRecording()"><i class="fa-solid fa-folder-open"></i> Load</button>
+                    <button onclick="playRecording()"><i class="fa-solid fa-play"></i> Replay</button>
+                    <button onclick="clearRecording()"><i class="fa-solid fa-trash"></i> Clear</button>
+                </div>
+            </div>
+
             <div id="lobster-container"></div>
         </div>
 
@@ -493,6 +618,168 @@ VIEWER_HTML = """
         const loading = document.getElementById('loading');
         const status = document.getElementById('status');
         const errorDiv = document.getElementById('error');
+
+        // Action Recorder variables
+        let isRecording = false;
+        let recordedActions = [];
+        let actionCounter = 0;
+
+        function toggleRecording() {
+            isRecording = !isRecording;
+            const recordBtn = document.getElementById('recordBtn');
+            const recordBtnText = document.getElementById('recordBtnText');
+            const recorderInfo = document.getElementById('recorderInfo');
+
+            if (isRecording) {
+                recordBtn.classList.remove('inactive');
+                recordBtn.classList.add('active');
+                recordBtnText.textContent = 'Stop Recording';
+                recorderInfo.textContent = `Recording... ${recordedActions.length} actions captured`;
+                actionCounter = 0;
+            } else {
+                recordBtn.classList.remove('active');
+                recordBtn.classList.add('inactive');
+                recordBtnText.textContent = 'Start Recording';
+                recorderInfo.textContent = `Stopped. ${recordedActions.length} actions recorded`;
+            }
+        }
+
+        function recordAction(action) {
+            if (!isRecording) return;
+
+            actionCounter++;
+            action.id = actionCounter;
+            action.timestamp = Date.now();
+            recordedActions.push(action);
+
+            // Update UI
+            const actionList = document.getElementById('actionList');
+            const actionItem = document.createElement('div');
+            actionItem.className = 'action-item';
+            actionItem.innerHTML = `
+                <span><span class="action-type">${action.type}</span> at (${action.x}, ${action.y})</span>
+                <span>${action.element_name || ''}</span>
+            `;
+            actionList.appendChild(actionItem);
+            actionList.scrollTop = actionList.scrollHeight;
+
+            document.getElementById('recorderInfo').textContent = `Recording... ${recordedActions.length} actions captured`;
+        }
+
+        function saveRecording() {
+            if (recordedActions.length === 0) {
+                alert('No actions to save!');
+                return;
+            }
+
+            const data = JSON.stringify(recordedActions, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `automation_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function loadRecording() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        recordedActions = JSON.parse(event.target.result);
+                        displayActions();
+                        document.getElementById('recorderInfo').textContent = `Loaded ${recordedActions.length} actions`;
+                    } catch (error) {
+                        alert('Error loading file: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function displayActions() {
+            const actionList = document.getElementById('actionList');
+            actionList.innerHTML = '';
+            recordedActions.forEach(action => {
+                const actionItem = document.createElement('div');
+                actionItem.className = 'action-item';
+                actionItem.innerHTML = `
+                    <span><span class="action-type">${action.type}</span> at (${action.x}, ${action.y})</span>
+                    <span>${action.element_name || ''}</span>
+                `;
+                actionList.appendChild(actionItem);
+            });
+        }
+
+        function clearRecording() {
+            if (recordedActions.length > 0 && !confirm('Clear all recorded actions?')) {
+                return;
+            }
+            recordedActions = [];
+            document.getElementById('actionList').innerHTML = '';
+            document.getElementById('recorderInfo').textContent = 'Click Record to capture your actions';
+            actionCounter = 0;
+        }
+
+        async function playRecording() {
+            if (recordedActions.length === 0) {
+                alert('No actions to replay!');
+                return;
+            }
+
+            document.getElementById('recorderInfo').textContent = 'Playing...';
+
+            for (let i = 0; i < recordedActions.length; i++) {
+                const action = recordedActions[i];
+                document.getElementById('recorderInfo').textContent = `Playing ${i+1}/${recordedActions.length}: ${action.type}`;
+
+                try {
+                    if (action.type === 'tap') {
+                        await fetch('/wda/tap', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ x: action.x, y: action.y })
+                        });
+                    } else if (action.type === 'longpress') {
+                        await fetch('/wda/longpress', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ x: action.x, y: action.y })
+                        });
+                    } else if (action.type === 'swipe') {
+                        await fetch('/wda/scroll', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(action.data)
+                        });
+                    } else if (action.type === 'type') {
+                        await fetch('/wda/type', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ text: action.text })
+                        });
+                    }
+
+                    // Wait between actions
+                    if (i < recordedActions.length - 1) {
+                        const delay = action.delay || 500;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                } catch (error) {
+                    console.error('Playback error:', error);
+                    alert(`Error playing action ${i+1}: ${error.message}`);
+                    break;
+                }
+            }
+
+            document.getElementById('recorderInfo').textContent = `Playback complete! ${recordedActions.length} actions`;
+        }
 
         function updateScreenshot() {
             if (isPaused) return;
@@ -597,6 +884,12 @@ VIEWER_HTML = """
             }).then(r => r.json()).then(data => {
                 console.log('Text sent:', data);
                 input.value = '';
+            });
+
+            // Record action
+            recordAction({
+                type: 'type',
+                text: text
             });
         }
 
@@ -782,19 +1075,34 @@ VIEWER_HTML = """
                 }).then(r => r.json()).then(data => {
                     console.log('Long press:', data);
                 });
+                // Record action
+                recordAction({
+                    type: 'longpress',
+                    x: coords.x,
+                    y: coords.y,
+                    duration: 1.0
+                });
                 return;
             }
 
             // Swipe (moved > 10 pixels)
             if (distance > 10) {
+                const direction = coords.y < touchStartPos.y ? 'down' : 'up';
                 fetch('/wda/scroll', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        direction: coords.y < touchStartPos.y ? 'down' : 'up'
+                        direction: direction
                     })
                 }).then(r => r.json()).then(data => {
                     console.log('Swipe:', data);
+                });
+                // Record action
+                recordAction({
+                    type: 'swipe',
+                    x: coords.x,
+                    y: coords.y,
+                    data: { direction: direction }
                 });
                 return;
             }
@@ -806,6 +1114,13 @@ VIEWER_HTML = """
                 body: JSON.stringify({x: coords.x, y: coords.y})
             }).then(r => r.json()).then(data => {
                 console.log('Tap:', data);
+            });
+
+            // Record action
+            recordAction({
+                type: 'tap',
+                x: coords.x,
+                y: coords.y
             });
 
             gestureModeLabel.textContent = 'Tap';
@@ -1130,7 +1445,7 @@ def index():
 def wda_screenshot():
     """Proxy WDA screenshot endpoint - decode base64 JSON response"""
     try:
-        response = requests.get(WDA_URL, timeout=5)
+        response = requests.get(WDA_URL, timeout=30)
         if response.status_code == 200:
             import base64
             data = response.json()
@@ -1149,7 +1464,7 @@ def wda_screenshot():
 def wda_home():
     """Press home button via WDA"""
     try:
-        response = requests.post('http://localhost:8100/wda/homescreen', timeout=5)
+        response = requests.post('http://localhost:8100/wda/homescreen', timeout=30)
         return response.json(), response.status_code
     except Exception as e:
         return {'error': str(e)}, 500
@@ -1175,7 +1490,7 @@ def wda_tap():
         session_response = requests.post(
             'http://localhost:8100/session',
             json={'capabilities': {}},
-            timeout=5
+            timeout=30
         )
         session_id = session_response.json().get('sessionId')
 
@@ -1196,7 +1511,7 @@ def wda_tap():
         response = requests.post(
             f'http://localhost:8100/session/{session_id}/actions',
             json=tap_data,
-            timeout=5
+            timeout=30
         )
         return response.json(), response.status_code
     except Exception as e:
@@ -1215,7 +1530,7 @@ def wda_longpress():
         session_response = requests.post(
             'http://localhost:8100/session',
             json={'capabilities': {}},
-            timeout=5
+            timeout=30
         )
         session_id = session_response.json().get('sessionId')
 
@@ -1236,7 +1551,7 @@ def wda_longpress():
         response = requests.post(
             f'http://localhost:8100/session/{session_id}/actions',
             json=press_data,
-            timeout=5
+            timeout=30
         )
         return response.json(), response.status_code
     except Exception as e:
@@ -1262,7 +1577,7 @@ def wda_type():
         session_response = requests.post(
             'http://localhost:8100/session',
             json={'capabilities': {}},
-            timeout=5
+            timeout=30
         )
         session_id = session_response.json().get('sessionId')
 
@@ -1312,13 +1627,13 @@ def wda_scroll():
         response = requests.post(
             'http://localhost:8100/wda/dragfromtoforduration',
             json=swipe_data,
-            timeout=5
+            timeout=30
         )
 
         if response.status_code != 200:
             # Fallback: try session-based swipe
             # First get session
-            session_resp = requests.get('http://localhost:8100/status', timeout=5)
+            session_resp = requests.get('http://localhost:8100/status', timeout=30)
             if session_resp.status_code == 200:
                 session_id = session_resp.json().get('sessionId', '')
                 if session_id:
@@ -1340,7 +1655,7 @@ def wda_scroll():
                     response = requests.post(
                         f'http://localhost:8100/session/{session_id}/actions',
                         json=actions_data,
-                        timeout=5
+                        timeout=30
                     )
 
         return response.json(), response.status_code
