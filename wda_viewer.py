@@ -451,6 +451,9 @@ VIEWER_HTML = """
                         status.textContent = '🟢 Live';
                         status.className = 'status live';
                         errorDiv.style.display = 'none';
+
+                        // Fetch next frame after short delay for smooth, fast refresh
+                        setTimeout(() => updateScreenshot(), 150);
                     };
                     img.src = imageUrl;
                 })
@@ -460,6 +463,9 @@ VIEWER_HTML = """
                     status.className = 'status';
                     errorDiv.textContent = 'Cannot connect to WDA on port 8100. Make sure iproxy is running.';
                     errorDiv.style.display = 'block';
+
+                    // Retry after delay on error
+                    setTimeout(() => updateScreenshot(), 1000);
                 });
         }
 
@@ -673,9 +679,8 @@ VIEWER_HTML = """
             });
         }
 
-        // Start auto-refresh
+        // Start auto-refresh with continuous loop for fast framerate (~6-7 FPS)
         updateScreenshot();
-        refreshInterval = setInterval(updateScreenshot, 1000); // Update every 1 second
 
         // Cleanup old blob URLs to prevent memory leaks
         let lastUrl = null;
