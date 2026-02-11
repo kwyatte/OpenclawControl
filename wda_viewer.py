@@ -147,6 +147,7 @@ VIEWER_HTML = """
             align-items: center;
             justify-content: center;
             background: #f0f0f0;
+            cursor: crosshair;
         }
 
         #screenshot {
@@ -154,6 +155,83 @@ VIEWER_HTML = """
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+
+        .cursor-overlay {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ef4444;
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 100;
+        }
+
+        .cursor-overlay.active {
+            opacity: 1;
+        }
+
+        .element-inspector {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            max-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+        }
+
+        .element-inspector.active {
+            display: block;
+        }
+
+        .element-inspector h3 {
+            color: #e2e8f0;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .element-inspector pre {
+            color: #94a3b8;
+            font-size: 11px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .text-input-bar {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .text-input-bar input {
+            flex: 1;
+            padding: 8px 12px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 14px;
+        }
+
+        .text-input-bar input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .gesture-mode {
+            margin-top: 10px;
+            text-align: center;
+            color: #64748b;
+            font-size: 12px;
         }
 
         .loading {
@@ -296,12 +374,13 @@ VIEWER_HTML = """
                 <div class="speaker"></div>
             </div>
             <div class="screen">
-                <div class="screen-content">
+                <div class="screen-content" id="screenContent">
                     <div class="loading" id="loading">
                         <div class="spinner"></div>
                         Loading screen...
                     </div>
                     <img id="screenshot" style="display: none;" alt="iPhone Screen">
+                    <div class="cursor-overlay" id="cursor"></div>
                 </div>
             </div>
         </div>
@@ -327,9 +406,20 @@ VIEWER_HTML = """
             </div>
 
             <div class="refresh-rate">Auto-refresh: <span id="rate">1s</span></div>
+            <div class="gesture-mode">Mode: <span id="gestureMode">Tap</span> | Hold Shift: Long Press | Hold Ctrl: Inspect</div>
             <div class="error" id="error" style="display: none;"></div>
 
+            <div class="text-input-bar">
+                <input type="text" id="textInput" placeholder="Type text to send to iPhone...">
+                <button onclick="sendText()"><i class="fa-solid fa-keyboard"></i> Send</button>
+            </div>
+
             <div id="lobster-container"></div>
+        </div>
+
+        <div class="element-inspector" id="inspector">
+            <h3><i class="fa-solid fa-magnifying-glass"></i> Element Inspector</h3>
+            <pre id="inspectorContent">Click element while holding Ctrl...</pre>
         </div>
     </div>
 
@@ -425,6 +515,154 @@ VIEWER_HTML = """
             link.download = 'iphone_screenshot_' + Date.now() + '.jpg';
             link.click();
         }
+
+        function sendText() {
+            const input = document.getElementById('textInput');
+            const text = input.value;
+            if (!text) return;
+
+            fetch('/wda/type', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            }).then(r => r.json()).then(data => {
+                console.log('Text sent:', data);
+                input.value = '';
+            });
+        }
+
+        // Remote control functionality
+        const screenContent = document.getElementById('screenContent');
+        const cursor = document.getElementById('cursor');
+        const screenshot = document.getElementById('screenshot');
+        const inspector = document.getElementById('inspector');
+        const inspectorContent = document.getElementById('inspectorContent');
+        const gestureModeLabel = document.getElementById('gestureMode');
+
+        let touchStartTime = 0;
+        let touchStartPos = {x: 0, y: 0};
+
+        // Convert browser coordinates to iPhone coordinates
+        function convertCoords(event) {
+            const rect = screenshot.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // iPhone X resolution: 1125x2436 (3x scale of 375x812)
+            const iPhoneX = Math.round((x / rect.width) * 375);
+            const iPhoneY = Math.round((y / rect.height) * 812);
+
+            return {x: iPhoneX, y: iPhoneY, browserX: x, browserY: y};
+        }
+
+        // Show cursor on hover
+        screenContent.addEventListener('mousemove', (e) => {
+            if (e.target !== screenshot) return;
+            const coords = convertCoords(e);
+            cursor.style.left = coords.browserX + 'px';
+            cursor.style.top = coords.browserY + 'px';
+            cursor.classList.add('active');
+        });
+
+        screenContent.addEventListener('mouseleave', () => {
+            cursor.classList.remove('active');
+        });
+
+        // Handle clicks/taps
+        screenContent.addEventListener('mousedown', (e) => {
+            if (e.target !== screenshot) return;
+            e.preventDefault();
+
+            touchStartTime = Date.now();
+            const coords = convertCoords(e);
+            touchStartPos = coords;
+
+            // Update gesture mode display
+            if (e.shiftKey) {
+                gestureModeLabel.textContent = 'Long Press';
+            } else if (e.ctrlKey || e.metaKey) {
+                gestureModeLabel.textContent = 'Inspect';
+            } else {
+                gestureModeLabel.textContent = 'Tap';
+            }
+        });
+
+        screenContent.addEventListener('mouseup', (e) => {
+            if (e.target !== screenshot) return;
+            e.preventDefault();
+
+            const duration = (Date.now() - touchStartTime) / 1000;
+            const coords = convertCoords(e);
+            const distance = Math.sqrt(
+                Math.pow(coords.x - touchStartPos.x, 2) +
+                Math.pow(coords.y - touchStartPos.y, 2)
+            );
+
+            // Inspect mode (Ctrl/Cmd + Click)
+            if (e.ctrlKey || e.metaKey) {
+                inspector.classList.add('active');
+                inspectorContent.textContent = 'Loading element info...';
+
+                fetch('/wda/source')
+                    .then(r => r.json())
+                    .then(data => {
+                        inspectorContent.textContent = JSON.stringify(data, null, 2);
+                    })
+                    .catch(err => {
+                        inspectorContent.textContent = 'Error: ' + err;
+                    });
+                return;
+            }
+
+            // Long press (Shift + Click or hold > 0.5s)
+            if (e.shiftKey || duration > 0.5) {
+                fetch('/wda/longpress', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({x: coords.x, y: coords.y, duration: 1.0})
+                }).then(r => r.json()).then(data => {
+                    console.log('Long press:', data);
+                });
+                return;
+            }
+
+            // Swipe (moved > 10 pixels)
+            if (distance > 10) {
+                fetch('/wda/scroll', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        direction: coords.y < touchStartPos.y ? 'down' : 'up'
+                    })
+                }).then(r => r.json()).then(data => {
+                    console.log('Swipe:', data);
+                });
+                return;
+            }
+
+            // Regular tap
+            fetch('/wda/tap', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({x: coords.x, y: coords.y})
+            }).then(r => r.json()).then(data => {
+                console.log('Tap:', data);
+            });
+
+            gestureModeLabel.textContent = 'Tap';
+        });
+
+        // Close inspector
+        inspector.addEventListener('click', () => {
+            inspector.classList.remove('active');
+        });
+
+        // Text input on Enter
+        document.getElementById('textInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendText();
+            }
+        });
 
         function clawdMode() {
             fetch('/wda/clawd', {
@@ -757,6 +995,69 @@ def wda_clawd():
     try:
         # TODO: Implement Clawd Mode automation
         return {'status': 'success', 'message': 'Clawd Mode activated'}, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/wda/tap', methods=['POST'])
+def wda_tap():
+    """Tap at coordinates on iPhone screen"""
+    try:
+        data = request.json
+        x = data.get('x', 0)
+        y = data.get('y', 0)
+
+        # Use WDA tap endpoint
+        response = requests.post(
+            'http://localhost:8100/wda/tap/0',
+            json={'x': x, 'y': y},
+            timeout=5
+        )
+        return response.json(), response.status_code
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/wda/longpress', methods=['POST'])
+def wda_longpress():
+    """Long press at coordinates"""
+    try:
+        data = request.json
+        x = data.get('x', 0)
+        y = data.get('y', 0)
+        duration = data.get('duration', 1.0)
+
+        # Use WDA touch and hold
+        response = requests.post(
+            'http://localhost:8100/wda/touchAndHold',
+            json={'x': x, 'y': y, 'duration': duration},
+            timeout=5
+        )
+        return response.json(), response.status_code
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/wda/source', methods=['GET'])
+def wda_source():
+    """Get accessibility hierarchy (element tree)"""
+    try:
+        response = requests.get('http://localhost:8100/source', timeout=10)
+        return response.json(), response.status_code
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/wda/type', methods=['POST'])
+def wda_type():
+    """Type text on iOS keyboard"""
+    try:
+        data = request.json
+        text = data.get('text', '')
+
+        # Use WDA keys endpoint
+        response = requests.post(
+            'http://localhost:8100/wda/keys',
+            json={'value': list(text)},
+            timeout=5
+        )
+        return response.json(), response.status_code
     except Exception as e:
         return {'error': str(e)}, 500
 
