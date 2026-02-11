@@ -227,6 +227,27 @@ VIEWER_HTML = """
             border-color: #3b82f6;
         }
 
+        .status-log {
+            margin-top: 15px;
+            padding: 10px 15px;
+            background: #1e293b;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 13px;
+        }
+
+        .status-log strong {
+            color: #e2e8f0;
+            margin-right: 8px;
+        }
+
+        #phoneStatus {
+            color: #60a5fa;
+            font-weight: 500;
+        }
+
         .gesture-mode {
             margin-top: 10px;
             text-align: center;
@@ -414,6 +435,10 @@ VIEWER_HTML = """
                 <button onclick="sendText()"><i class="fa-solid fa-keyboard"></i> Send</button>
             </div>
 
+            <div class="status-log">
+                <strong>STATUS:</strong> <span id="phoneStatus">Detecting...</span>
+            </div>
+
             <div id="lobster-container"></div>
         </div>
 
@@ -535,6 +560,57 @@ VIEWER_HTML = """
                 console.log('Text sent:', data);
                 input.value = '';
             });
+        }
+
+        // Update phone status log
+        function updatePhoneStatus() {
+            fetch('/wda/source')
+                .then(r => r.json())
+                .then(data => {
+                    const statusSpan = document.getElementById('phoneStatus');
+
+                    // Parse the source tree to determine current state
+                    const sourceStr = JSON.stringify(data);
+
+                    // Check if phone is locked/sleeping
+                    if (sourceStr.includes('"name":"Passcode') || sourceStr.includes('Enter Passcode')) {
+                        statusSpan.textContent = 'Phone locked - Enter passcode';
+                    }
+                    // Check if on home screen
+                    else if (sourceStr.includes('SpringBoard') && (sourceStr.includes('Home Screen') || sourceStr.includes('com.apple.springboard'))) {
+                        statusSpan.textContent = 'Currently on Home screen';
+                    }
+                    // Check for specific apps
+                    else if (sourceStr.includes('com.apple.mobilesafari')) {
+                        statusSpan.textContent = 'Currently in Safari';
+                    }
+                    else if (sourceStr.includes('com.apple.MobileSMS')) {
+                        statusSpan.textContent = 'Currently in Messages';
+                    }
+                    else if (sourceStr.includes('com.apple.mobilemail')) {
+                        statusSpan.textContent = 'Currently in Mail';
+                    }
+                    else if (sourceStr.includes('com.apple.Preferences')) {
+                        statusSpan.textContent = 'Currently in Settings';
+                    }
+                    else if (sourceStr.includes('com.atebits.Tweetie2') || sourceStr.includes('twitter')) {
+                        statusSpan.textContent = 'Currently in Twitter/X';
+                    }
+                    // Generic app detection
+                    else {
+                        const bundleMatch = sourceStr.match(/"bundleId":"([^"]+)"/);
+                        if (bundleMatch && bundleMatch[1] && bundleMatch[1] !== 'com.apple.springboard') {
+                            const appName = bundleMatch[1].split('.').pop();
+                            statusSpan.textContent = `Currently in ${appName}`;
+                        } else {
+                            statusSpan.textContent = 'Phone active';
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Status update error:', err);
+                    document.getElementById('phoneStatus').textContent = 'Unable to detect';
+                });
         }
 
         // Remote control functionality
@@ -681,6 +757,13 @@ VIEWER_HTML = """
 
         // Start auto-refresh with continuous loop for fast framerate (~6-7 FPS)
         updateScreenshot();
+
+        // Update phone status periodically (every 2 seconds)
+        updatePhoneStatus();
+        setInterval(updatePhoneStatus, 2000);
+
+        // Update refresh rate display
+        document.getElementById('rate').textContent = '~150ms';
 
         // Cleanup old blob URLs to prevent memory leaks
         let lastUrl = null;
