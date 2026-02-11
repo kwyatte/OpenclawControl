@@ -4,7 +4,7 @@ WDA iPhone X Live View
 Shows real-time iPhone screen via WebDriverAgent
 """
 
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 import requests
 
 app = Flask(__name__)
@@ -1006,10 +1006,31 @@ def wda_tap():
         x = data.get('x', 0)
         y = data.get('y', 0)
 
-        # Use WDA tap endpoint
+        # First ensure we have a session
+        session_response = requests.post(
+            'http://localhost:8100/session',
+            json={'capabilities': {}},
+            timeout=5
+        )
+        session_id = session_response.json().get('sessionId')
+
+        # Use W3C WebDriver actions endpoint
+        tap_data = {
+            "actions": [{
+                "type": "pointer",
+                "id": "finger1",
+                "parameters": {"pointerType": "touch"},
+                "actions": [
+                    {"type": "pointerMove", "duration": 0, "x": x, "y": y},
+                    {"type": "pointerDown"},
+                    {"type": "pause", "duration": 100},
+                    {"type": "pointerUp"}
+                ]
+            }]
+        }
         response = requests.post(
-            'http://localhost:8100/wda/tap/0',
-            json={'x': x, 'y': y},
+            f'http://localhost:8100/session/{session_id}/actions',
+            json=tap_data,
             timeout=5
         )
         return response.json(), response.status_code
@@ -1025,10 +1046,31 @@ def wda_longpress():
         y = data.get('y', 0)
         duration = data.get('duration', 1.0)
 
-        # Use WDA touch and hold
+        # First ensure we have a session
+        session_response = requests.post(
+            'http://localhost:8100/session',
+            json={'capabilities': {}},
+            timeout=5
+        )
+        session_id = session_response.json().get('sessionId')
+
+        # Use W3C WebDriver actions endpoint for long press
+        press_data = {
+            "actions": [{
+                "type": "pointer",
+                "id": "finger1",
+                "parameters": {"pointerType": "touch"},
+                "actions": [
+                    {"type": "pointerMove", "duration": 0, "x": x, "y": y},
+                    {"type": "pointerDown"},
+                    {"type": "pause", "duration": int(duration * 1000)},  # Convert to milliseconds
+                    {"type": "pointerUp"}
+                ]
+            }]
+        }
         response = requests.post(
-            'http://localhost:8100/wda/touchAndHold',
-            json={'x': x, 'y': y, 'duration': duration},
+            f'http://localhost:8100/session/{session_id}/actions',
+            json=press_data,
             timeout=5
         )
         return response.json(), response.status_code
