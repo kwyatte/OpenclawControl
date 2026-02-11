@@ -27,29 +27,39 @@ VIEWER_HTML = """
             box-sizing: border-box;
         }
 
+        html, body {
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: #000;
-            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 10px;
         }
 
         .container {
             background: #000;
             border-radius: 30px;
-            padding: 30px;
-            max-width: 900px;
+            padding: 20px;
+            max-width: 95vw;
+            max-height: 95vh;
             display: flex;
-            gap: 40px;
+            gap: 30px;
             align-items: center;
+            overflow: hidden;
         }
 
         .phone-section {
             flex-shrink: 0;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
         }
 
         .controls-section {
@@ -79,11 +89,33 @@ VIEWER_HTML = """
             font-weight: 500;
         }
 
+        .port-info {
+            text-align: center;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .port-info div {
+            margin: 3px 0;
+        }
+
+        .port-info strong {
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
         /* iPhone X Frame */
         .iphone-x {
             position: relative;
             width: 360px;
             height: 720px;
+            max-height: 75vh;
+            max-width: calc(75vh / 2);
             margin: 0 auto;
             background: #1a1a1a;
             border-radius: 45px;
@@ -388,6 +420,12 @@ VIEWER_HTML = """
         <div class="phone-section">
             <h1><i class="fa-solid fa-mobile-screen"></i> iPhone X Live View</h1>
             <div class="status" id="status">Connecting to WDA...</div>
+
+            <div class="port-info">
+                <div><strong>WDA Port:</strong> localhost:8100</div>
+                <div><strong>iproxy:</strong> localhost:8100 → device:8100</div>
+                <div><strong>Viewer:</strong> localhost:5000</div>
+            </div>
 
             <div class="iphone-x">
             <div class="notch">
