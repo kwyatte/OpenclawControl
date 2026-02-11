@@ -429,7 +429,7 @@ def wda_home():
 
 @app.route('/wda/scroll', methods=['POST'])
 def wda_scroll():
-    """Scroll screen via WDA touch actions"""
+    """Scroll screen via WDA swipe/drag API"""
     try:
         from flask import request
         data = request.json
@@ -443,32 +443,57 @@ def wda_scroll():
         # Define swipe coordinates based on direction
         if direction == 'down':
             # Swipe down = scroll up content
-            start_y = screen_height * 0.7
-            end_y = screen_height * 0.3
+            from_y = int(screen_height * 0.7)
+            to_y = int(screen_height * 0.3)
         else:  # up
             # Swipe up = scroll down content
-            start_y = screen_height * 0.3
-            end_y = screen_height * 0.7
+            from_y = int(screen_height * 0.3)
+            to_y = int(screen_height * 0.7)
 
-        # Use WDA touch action API
-        actions = [{
-            "action": "press",
-            "options": {"x": center_x, "y": start_y}
-        }, {
-            "action": "wait",
-            "options": {"ms": 100}
-        }, {
-            "action": "moveTo",
-            "options": {"x": center_x, "y": end_y}
-        }, {
-            "action": "release"
-        }]
+        # Use WDA drag/swipe endpoint
+        swipe_data = {
+            "fromX": center_x,
+            "fromY": from_y,
+            "toX": center_x,
+            "toY": to_y,
+            "duration": 0.3
+        }
 
+        # Try the /wda/dragfromtoforduration endpoint
         response = requests.post(
-            'http://localhost:8100/wda/touch/perform',
-            json={"actions": actions},
+            'http://localhost:8100/wda/dragfromtoforduration',
+            json=swipe_data,
             timeout=5
         )
+
+        if response.status_code != 200:
+            # Fallback: try session-based swipe
+            # First get session
+            session_resp = requests.get('http://localhost:8100/status', timeout=5)
+            if session_resp.status_code == 200:
+                session_id = session_resp.json().get('sessionId', '')
+                if session_id:
+                    # Use session-based touch action
+                    actions_data = {
+                        "actions": [{
+                            "type": "pointer",
+                            "id": "finger1",
+                            "parameters": {"pointerType": "touch"},
+                            "actions": [
+                                {"type": "pointerMove", "duration": 0, "x": center_x, "y": from_y},
+                                {"type": "pointerDown", "button": 0},
+                                {"type": "pause", "duration": 100},
+                                {"type": "pointerMove", "duration": 300, "x": center_x, "y": to_y},
+                                {"type": "pointerUp", "button": 0}
+                            ]
+                        }]
+                    }
+                    response = requests.post(
+                        f'http://localhost:8100/session/{session_id}/actions',
+                        json=actions_data,
+                        timeout=5
+                    )
+
         return response.json(), response.status_code
     except Exception as e:
         return {'error': str(e)}, 500
