@@ -12,35 +12,6 @@ app = Flask(__name__)
 # WDA Screenshot endpoint
 WDA_URL = "http://localhost:8100/screenshot"
 
-# Cached WDA session to prevent creating new sessions every time
-_wda_session_cache = {'session_id': None, 'last_check': 0}
-
-def get_wda_session():
-    """Get or create a WDA session with caching to prevent disconnects"""
-    import time
-
-    # Check cache every 30 seconds
-    current_time = time.time()
-    if _wda_session_cache['session_id'] and (current_time - _wda_session_cache['last_check'] < 30):
-        return _wda_session_cache['session_id']
-
-    try:
-        # Try to get existing session or create new one
-        response = requests.post(
-            'http://localhost:8100/session',
-            json={'capabilities': {}},
-            timeout=5
-        )
-        if response.status_code == 200:
-            session_id = response.json().get('sessionId')
-            _wda_session_cache['session_id'] = session_id
-            _wda_session_cache['last_check'] = current_time
-            return session_id
-    except:
-        pass
-
-    return _wda_session_cache['session_id']
-
 VIEWER_HTML = """
 <!DOCTYPE html>
 <html>
@@ -830,14 +801,6 @@ VIEWER_HTML = """
         updatePhoneStatus();
         setInterval(updatePhoneStatus, 2000);
 
-        // Keep WDA connection alive with periodic pings (every 10 seconds)
-        setInterval(() => {
-            fetch('/wda/keepalive')
-                .then(r => r.json())
-                .then(data => console.log('WDA keepalive:', data.status))
-                .catch(err => console.error('Keepalive error:', err));
-        }, 10000);
-
         // Update refresh rate display
         document.getElementById('rate').textContent = '~150ms';
 
@@ -1125,24 +1088,11 @@ VIEWER_HTML = """
 def index():
     return render_template_string(VIEWER_HTML)
 
-@app.route('/wda/keepalive', methods=['GET'])
-def wda_keepalive():
-    """Keep WDA connection alive by pinging status endpoint"""
-    try:
-        response = requests.get('http://localhost:8100/status', timeout=3)
-        if response.status_code == 200:
-            # Refresh session cache
-            get_wda_session()
-            return {'status': 'alive', 'wda': response.json()}, 200
-        return {'status': 'error'}, response.status_code
-    except Exception as e:
-        return {'status': 'error', 'message': str(e)}, 500
-
 @app.route('/wda/screenshot')
 def wda_screenshot():
     """Proxy WDA screenshot endpoint - decode base64 JSON response"""
     try:
-        response = requests.get(WDA_URL, timeout=10)
+        response = requests.get(WDA_URL, timeout=5)
         if response.status_code == 200:
             import base64
             data = response.json()
@@ -1183,10 +1133,13 @@ def wda_tap():
         x = data.get('x', 0)
         y = data.get('y', 0)
 
-        # Get cached session (prevents creating new sessions constantly)
-        session_id = get_wda_session()
-        if not session_id:
-            return {'error': 'Failed to get WDA session'}, 500
+        # First ensure we have a session
+        session_response = requests.post(
+            'http://localhost:8100/session',
+            json={'capabilities': {}},
+            timeout=5
+        )
+        session_id = session_response.json().get('sessionId')
 
         # Use W3C WebDriver actions endpoint
         tap_data = {
@@ -1220,10 +1173,13 @@ def wda_longpress():
         y = data.get('y', 0)
         duration = data.get('duration', 1.0)
 
-        # Get cached session (prevents creating new sessions constantly)
-        session_id = get_wda_session()
-        if not session_id:
-            return {'error': 'Failed to get WDA session'}, 500
+        # First ensure we have a session
+        session_response = requests.post(
+            'http://localhost:8100/session',
+            json={'capabilities': {}},
+            timeout=5
+        )
+        session_id = session_response.json().get('sessionId')
 
         # Use W3C WebDriver actions endpoint for long press
         press_data = {
@@ -1264,10 +1220,13 @@ def wda_type():
         data = request.json
         text = data.get('text', '')
 
-        # Get cached session (prevents creating new sessions constantly)
-        session_id = get_wda_session()
-        if not session_id:
-            return {'error': 'Failed to get WDA session'}, 500
+        # First ensure we have a session
+        session_response = requests.post(
+            'http://localhost:8100/session',
+            json={'capabilities': {}},
+            timeout=5
+        )
+        session_id = session_response.json().get('sessionId')
 
         # Use session-based WDA keys endpoint for fast typing
         response = requests.post(
