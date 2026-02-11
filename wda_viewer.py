@@ -1088,16 +1088,24 @@ def wda_source():
 
 @app.route('/wda/type', methods=['POST'])
 def wda_type():
-    """Type text on iOS keyboard"""
+    """Type text on iOS keyboard - fast typing"""
     try:
         data = request.json
         text = data.get('text', '')
 
-        # Use WDA keys endpoint
-        response = requests.post(
-            'http://localhost:8100/wda/keys',
-            json={'value': list(text)},
+        # First ensure we have a session
+        session_response = requests.post(
+            'http://localhost:8100/session',
+            json={'capabilities': {}},
             timeout=5
+        )
+        session_id = session_response.json().get('sessionId')
+
+        # Use session-based WDA keys endpoint for fast typing
+        response = requests.post(
+            f'http://localhost:8100/session/{session_id}/wda/keys',
+            json={'value': list(text)},
+            timeout=10
         )
         return response.json(), response.status_code
     except Exception as e:
