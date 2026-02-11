@@ -572,29 +572,62 @@ VIEWER_HTML = """
                     // Parse the source tree to determine current state
                     const sourceStr = JSON.stringify(data);
 
-                    // Check if phone is locked/sleeping
-                    if (sourceStr.includes('"name":"Passcode') || sourceStr.includes('Enter Passcode')) {
+                    // Check if screen is off (minimal source tree, typically just a few elements)
+                    const isScreenOff = sourceStr.length < 500 ||
+                                       (!sourceStr.includes('SpringBoard') &&
+                                        !sourceStr.includes('Application') &&
+                                        !sourceStr.includes('Window'));
+
+                    if (isScreenOff) {
+                        statusSpan.textContent = 'Phone sleep';
+                        if (typeof window.sleep === 'function' && window.isAwake) {
+                            window.sleep();  // Make lobster sleep when screen is off
+                        }
+                    }
+                    // Check if phone is locked but screen is on
+                    else if (sourceStr.includes('"name":"Passcode') || sourceStr.includes('Enter Passcode')) {
                         statusSpan.textContent = 'Phone locked - Enter passcode';
+                        if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                            window.wakeUp();  // Wake lobster when screen turns on
+                        }
                     }
                     // Check if on home screen
                     else if (sourceStr.includes('SpringBoard') && (sourceStr.includes('Home Screen') || sourceStr.includes('com.apple.springboard'))) {
                         statusSpan.textContent = 'Currently on Home screen';
+                        if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                            window.wakeUp();  // Wake lobster when screen turns on
+                        }
                     }
                     // Check for specific apps
                     else if (sourceStr.includes('com.apple.mobilesafari')) {
                         statusSpan.textContent = 'Currently in Safari';
+                        if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                            window.wakeUp();
+                        }
                     }
                     else if (sourceStr.includes('com.apple.MobileSMS')) {
                         statusSpan.textContent = 'Currently in Messages';
+                        if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                            window.wakeUp();
+                        }
                     }
                     else if (sourceStr.includes('com.apple.mobilemail')) {
                         statusSpan.textContent = 'Currently in Mail';
+                        if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                            window.wakeUp();
+                        }
                     }
                     else if (sourceStr.includes('com.apple.Preferences')) {
                         statusSpan.textContent = 'Currently in Settings';
+                        if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                            window.wakeUp();
+                        }
                     }
                     else if (sourceStr.includes('com.atebits.Tweetie2') || sourceStr.includes('twitter')) {
                         statusSpan.textContent = 'Currently in Twitter/X';
+                        if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                            window.wakeUp();
+                        }
                     }
                     // Generic app detection
                     else {
@@ -602,8 +635,14 @@ VIEWER_HTML = """
                         if (bundleMatch && bundleMatch[1] && bundleMatch[1] !== 'com.apple.springboard') {
                             const appName = bundleMatch[1].split('.').pop();
                             statusSpan.textContent = `Currently in ${appName}`;
+                            if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                                window.wakeUp();
+                            }
                         } else {
                             statusSpan.textContent = 'Phone active';
+                            if (typeof window.wakeUp === 'function' && !window.isAwake) {
+                                window.wakeUp();
+                            }
                         }
                     }
                 })
@@ -962,13 +1001,13 @@ VIEWER_HTML = """
         zzz3.visible = false;
         lobster.add(zzz3);
 
-        // Animation state
-        let isAwake = false;
+        // Animation state (global for status detection)
+        window.isAwake = false;
         let sleepTime = 0;
 
         // Sleeping animation
-        function sleep() {
-            isAwake = false;
+        window.sleep = function() {
+            window.isAwake = false;
             head.rotation.x = -0.4;
             lobster.position.y = -0.8;
             leftEye.scale.y = 0.1;
@@ -983,8 +1022,8 @@ VIEWER_HTML = """
         }
 
         // Wake up animation
-        function wakeUp() {
-            isAwake = true;
+        window.wakeUp = function() {
+            window.isAwake = true;
             head.rotation.x = 0;
             lobster.position.y = -0.5;
             leftEye.scale.y = 1;
@@ -1001,12 +1040,12 @@ VIEWER_HTML = """
         }
 
         // Start sleeping
-        sleep();
+        window.sleep();
 
         // Click handler
         container.addEventListener('click', () => {
-            if (!isAwake) {
-                wakeUp();
+            if (!window.isAwake) {
+                window.wakeUp();
                 goHome();
             }
         });
@@ -1015,7 +1054,7 @@ VIEWER_HTML = """
         function animate() {
             requestAnimationFrame(animate);
 
-            if (isAwake) {
+            if (window.isAwake) {
                 lobster.position.y = -0.5 + Math.sin(Date.now() * 0.001) * 0.05;
                 leftClaw.scale.x = 1 + Math.sin(Date.now() * 0.003) * 0.1;
                 rightClaw.scale.x = 1 + Math.sin(Date.now() * 0.003 + Math.PI) * 0.1;
